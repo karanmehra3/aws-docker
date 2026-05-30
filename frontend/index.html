@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login & Sign Up Page</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f4f4f9; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .login-card { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 300px; text-align: center; }
+        input { width: 90%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 5px; }
+        .btn-container { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+        button { color: white; border: none; padding: 10px; width: 96%; border-radius: 5px; cursor: pointer; font-size: 16px; font-weight: bold; }
+        .login-btn { background: #28a745; }
+        .login-btn:hover { background: #218838; }
+        .signup-btn { background: #007bff; }
+        .signup-btn:hover { background: #0056b3; }
+        #message { margin-top: 15px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="login-card">
+        <h2 id="formTitle">Login / Sign Up</h2>
+        <form id="authForm">
+            <input type="email" id="email" placeholder="Enter Email" required>
+            <input type="password" id="password" placeholder="Enter Password" required>
+            
+            <div class="btn-container">
+                <button type="button" id="loginBtn" class="login-btn">Submit (Login)</button>
+                
+                <button type="button" id="signupBtn" class="signup-btn">Naya Account Banaayein (Sign Up)</button>
+            </div>
+        </form>
+        <p id="message"></p>
+    </div>
+
+    <script>
+        const messageEl = document.getElementById('message');
+
+        // ---- 1. LOGIN LOGIC ----
+        document.getElementById('loginBtn').addEventListener('click', async () => {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            if(!email || !password) {
+                messageEl.style.color = "red";
+                messageEl.textContent = "Bhai, email aur password dono daalo pehle!";
+                return;
+            }
+
+            try {
+                // 🛠️ Yahan change kiya hai: Backend ka full port 3000 wala URL dala hai
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    messageEl.style.color = "green";
+                    messageEl.textContent = "🎉 Successfully Login Ho Gaye Bhai!";
+                } else {
+                    messageEl.style.color = "red";
+                    messageEl.textContent = data.message || "Login Failed!";
+                }
+            } catch (err) {
+                messageEl.style.color = "red";
+                messageEl.textContent = "Server down h bhai!";
+            }
+        });
+
+        // ---- 2. SIGN UP LOGIC ----
+        document.getElementById('signupBtn').addEventListener('click', async () => {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            if(!email || !password) {
+                messageEl.style.color = "red";
+                messageEl.textContent = "Bhai, account banane ke liye details toh daalo!";
+                return;
+            }
+
+            try {
+                // 🛠️ Yahan bhi backend ka full port 3000 wala URL dala hai
+                const response = await fetch('/signup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    messageEl.style.color = "green";
+                    messageEl.textContent = "🔥 Account Ban Gaya! Ab Submit (Login) dabao.";
+                } else {
+                    messageEl.style.color = "red";
+                    messageEl.textContent = data.message || "Signup Failed!";
+                }
+            } catch (err) {
+                messageEl.style.color = "red";
+                messageEl.textContent = "Server respond nahi kar raha!";
+            }
+        });
+    </script>
+</body>
+</html>
