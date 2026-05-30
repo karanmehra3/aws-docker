@@ -1,90 +1,119 @@
 const express = require('express');
-const mongoose = require('mongoose');
+const mysql = require('mysql2'); // 👈 1. Mongoose ki jagah ab MySQL use hoga
 const path = require('path');
-const cors = require('cors'); // 👈 1. YAHAN CORS IMPORT KIYA
+const cors = require('cors'); 
 
 const app = express();
 
-app.use(cors()); // 👈 2. YAHAN EXPRESS KO BOLA CORS ALLOW KARE
+app.use(cors()); 
 app.use(express.json());
 
 // 💥 LINE 9 WALI STATIC SERVING BALI LINE HATA DI HAI KYUNKI FRONTEND ALAG HAI
 
-// 🌟 Aapka MongoDB Atlas connection string (Isko aise hi rehne diya cloud ke liye)
-const MONGO_URI = "mongodb+srv://kannu:kannu123@cluster0.iqfnkwx.mongodb.net/logindb?appName=Cluster0";
-
-mongoose.connect(MONGO_URI)
-  .then(() => console.log("MongoDB Web Database Connected! 🔥"))
-  .catch(err => console.log("DB Connection Error: ", err));
-
-// Database Schema (User ka structure)
-const UserSchema = new mongoose.Schema({
-    email: { type: String, required: true, unique: true },
-    password: { type: String, required: true }
+// ☁️ AWS RDS (Cloud MySQL) Connection Settings
+// ⚠️ JAB RDS BAN JAYE, TO ENPOINT YAHAN HOST ME PASTE KARNA
+const db = mysql.createConnection({
+    host: 'database-1.cti2ceeogmj2.us-east-2.rds.amazonaws.com', // 👈 AWS RDS Endpoint yahan aayega
+    user: 'root',                                  // 👈 RDS ka username
+    password: 'kannu123',                          // 👈 RDS ka password                          // 👈 Database ka naam
+    port: 3306                                     // 👈 MySQL ka port
 });
 
-// Agar model pehle se bana ho toh use karein, nahi toh naya banayein
-const User = mongoose.models.User || mongoose.model('User', UserSchema);
-
-// Ek dummy user auto-create karne ke liye
-async function createDummyUser() {
-    try {
-        const userExist = await User.findOne({ email: "admin@test.com" });
-        if (!userExist) {
-            await User.create({ email: "admin@test.com", password: "password123" });
-            console.log("Dummy User Created: admin@test.com / password123");
-        }
-    } catch (err) {
-        console.log("Dummy user banane me dikkat: ", err.message);
+db.connect((err) => {
+    if (err) {
+        console.error('AWS RDS Cloud DB Connection Failed: ' + err.stack);
+        return;
     }
+    console.log('AWS RDS Cloud MySQL Connected Successfully! ☁️🐬🔥');
+    
+    // 📊 USERS TABLE CREATION (Jaise MongoDB me schema tha, yahan Table banegi)
+    const createTableQuery = `
+        CREATE TABLE IF NOT EXISTS users (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            email VARCHAR(255) NOT NULL UNIQUE,
+            password VARCHAR(255) NOT NULL
+        )
+    `;
+    db.query(createTableQuery, (err) => {
+        if (err) {
+            console.log("Table banane me dikkat: ", err);
+        } else {
+            // Table banne ke baad hi dummy user check karenge
+            createDummyUser();
+        }
+    });
+});
+
+// 👥 Ek dummy user auto-create karne ke liye
+function createDummyUser() {
+    const checkUserQuery = 'SELECT * FROM users WHERE email = ?';
+    db.query(checkUserQuery, ['admin@test.com'], (err, results) => {
+        if (err) return console.log("Dummy user check karne me dikkat:", err.message);
+
+        if (results.length === 0) {
+            const insertDummyQuery = 'INSERT INTO users (email, password) VALUES (?, ?)';
+            db.query(insertDummyQuery, ['admin@test.com', 'password123'], (err) => {
+                if (err) console.log("Dummy user banane me dikkat:", err.message);
+                else console.log("Dummy User Created: admin@test.com / password123");
+            });
+        }
+    });
 }
-createDummyUser();
 
 // ----------------------------------------------------
-// 🚀 1. SIGNUP API ENDPOINT 
+// 🚀 1. SIGNUP API ENDPOINT (MySQL Tarika)
 // ----------------------------------------------------
-app.post('/signup', async (req, res) => {
+app.post('/signup', (req, res) => {
     const { email, password } = req.body;
 
-    try {
-        if (!email || !password) {
-            return res.status(400).json({ message: "Bhai email aur password dono daalo!" });
+    if (!email || !password) {
+        return res.status(400).json({ message: "Bhai email aur password dono daalo!" });
+    }
+
+    // Pehle check karo user pehle se hai ya nahi
+    const checkUserQuery = 'SELECT * FROM users WHERE email = ?';
+    db.query(checkUserQuery, [email], (err, results) => {
+        if (err) {
+            console.error("Signup Error:", err);
+            return res.status(500).json({ message: "Internal Server Error" });
         }
 
-        const userExists = await User.findOne({ email: email });
-        if (userExists) {
+        if (results.length > 0) {
             return res.status(400).json({ message: "Ye Email pehle se register hai bhee!" });
         }
 
-        const newUser = new User({ email, password });
-        await newUser.save();
-
-        return res.status(201).json({ message: "Signup Successful!" });
-
-    } catch (error) {
-        console.error("Signup Error:", error);
-        return res.status(500).json({ message: "Internal Server Error" });
-    }
+        // Agar naya user hai toh Insert kar do
+        const insertUserQuery = 'INSERT INTO users (email, password) VALUES (?, ?)';
+        db.query(insertUserQuery, [email, password], (err, result) => {
+            if (err) {
+                console.error("Signup Error:", err);
+                return res.status(500).json({ message: "Internal Server Error" });
+            }
+            return res.status(201).json({ message: "Signup Successful!" });
+        });
+    });
 });
 
 // ----------------------------------------------------
-// 🔐 2. LOGIN API ENDPOINT
+// 🔐 2. LOGIN API ENDPOINT (MySQL Tarika)
 // ----------------------------------------------------
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', (req, res) => {
     const { email, password } = req.body;
 
-    try {
-        const user = await User.findOne({ email: email, password: password });
+    const selectQuery = 'SELECT * FROM users WHERE email = ? AND password = ?';
+    db.query(selectQuery, [email, password], (err, results) => {
+        if (err) {
+            console.error("Login Error:", err);
+            return res.status(500).json({ message: "Internal Server Error" });
+        }
         
-        if (user) {
+        if (results.length > 0) {
             return res.status(200).json({ message: "Successfully Login" });
         } else {
             return res.status(401).json({ message: "Wrong Email or Password!" });
         }
-    } catch (error) {
-        return res.status(500).json({ message: "Internal Server Error" });
-    }
+    });
 });
 
 const PORT = 3000;
-app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
